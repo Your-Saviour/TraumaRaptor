@@ -361,8 +361,8 @@ LIMIT %v
 # %v
 */
 SELECT * FROM source(artifact=%q)
-LIMIT 50
-`, source_name, source_name),
+LIMIT %v
+`, source_name, source_name, default_limit),
 						})
 				}
 			}
