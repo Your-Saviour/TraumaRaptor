@@ -26,6 +26,7 @@ import (
 	config_proto "www.velocidex.com/golang/velociraptor/config/proto"
 	"www.velocidex.com/golang/velociraptor/logging"
 	"www.velocidex.com/golang/velociraptor/notifications"
+	"www.velocidex.com/golang/velociraptor/paths/artifacts"
 	"www.velocidex.com/golang/velociraptor/services"
 	"www.velocidex.com/golang/velociraptor/services/debug"
 	"www.velocidex.com/golang/velociraptor/services/journal"
@@ -104,15 +105,13 @@ func NewNotificationService(
 		services.GetOrgName(config_obj))
 
 	err := journal.WatchQueueWithCB(ctx, config_obj, wg,
-		"Server.Internal.Ping", "NotificationService",
-		self.ProcessPing)
+		artifacts.PING, "NotificationService", self.ProcessPing)
 	if err != nil {
 		return nil, err
 	}
 
 	err = journal.WatchQueueWithCB(ctx, config_obj, wg,
-		"Server.Internal.Pong", "NotificationService",
-		self.ProcessPong)
+		artifacts.PONG, "NotificationService", self.ProcessPong)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +122,7 @@ func NewNotificationService(
 		return nil, err
 	}
 	events, cancel := journal_service.Watch(ctx,
-		"Server.Internal.Notifications", "NotificationService")
+		artifacts.NOTIFICATION_QUEUE, "NotificationService")
 
 	wg.Add(1)
 	go func() {
@@ -238,7 +237,7 @@ func (self *Notifier) ProcessPing(ctx context.Context,
 			Set("NotifyTarget", notify_target).
 			Set("From", self.uuid).
 			Set("Connected", is_client_connected)},
-		"Server.Internal.Pong", "server", "")
+		artifacts.PONG)
 }
 
 func (self *Notifier) ListenForNotification(client_id string) (chan bool, func()) {
@@ -264,8 +263,7 @@ func (self *Notifier) NotifyListener(
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("Tag", tag).
 			Set("Target", id)},
-		"Server.Internal.Notifications", "server", "",
-	)
+		artifacts.NOTIFICATION_QUEUE)
 }
 
 func (self *Notifier) NotifyDirectListener(client_id string) {
@@ -289,7 +287,7 @@ func (self *Notifier) NotifyListenerAsync(
 		ordereddict.NewDict().
 			Set("Tag", tag).
 			Set("Target", id),
-		"Server.Internal.Notifications")
+		artifacts.NOTIFICATION_QUEUE)
 }
 
 func (self *Notifier) IsClientDirectlyConnected(client_id string) bool {
@@ -370,7 +368,7 @@ func (self *Notifier) IsClientConnected(
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("ClientId", client_id).
 			Set("NotifyTarget", id)},
-		"Server.Internal.Ping", "server", "")
+		artifacts.PING)
 	if err != nil {
 		return false
 	}

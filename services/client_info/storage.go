@@ -40,11 +40,13 @@ import (
 	actions_proto "www.velocidex.com/golang/velociraptor/actions/proto"
 	api_proto "www.velocidex.com/golang/velociraptor/api/proto"
 	config_proto "www.velocidex.com/golang/velociraptor/config/proto"
+	"www.velocidex.com/golang/velociraptor/constants"
 	"www.velocidex.com/golang/velociraptor/datastore"
 	"www.velocidex.com/golang/velociraptor/file_store"
 	"www.velocidex.com/golang/velociraptor/json"
 	"www.velocidex.com/golang/velociraptor/logging"
 	"www.velocidex.com/golang/velociraptor/paths"
+	"www.velocidex.com/golang/velociraptor/paths/artifacts"
 	"www.velocidex.com/golang/velociraptor/result_sets"
 	"www.velocidex.com/golang/velociraptor/services"
 	"www.velocidex.com/golang/velociraptor/utils"
@@ -132,7 +134,7 @@ func (self *Store) GetRecord(client_id string) (*actions_proto.ClientInfo, error
 }
 
 func (self *Store) _GetRecord(client_id string) (*actions_proto.ClientInfo, error) {
-	if client_id == "server" {
+	if client_id == constants.VELOCIRAPTOR_SERVER_CLIENT_ID {
 		return &actions_proto.ClientInfo{
 			ClientId: client_id,
 			Hostname: client_id,
@@ -283,6 +285,7 @@ func (self *Store) SaveSnapshot(
 	self.mu.Unlock()
 
 	completion := func() {
+		logger := logging.GetLogger(config_obj, &logging.FrontendComponent)
 		journal, err := services.GetJournal(config_obj)
 		if err == nil {
 			// We do not have to send the update that urgently so it
@@ -290,10 +293,9 @@ func (self *Store) SaveSnapshot(
 			journal.PushRowsToArtifactAsync(ctx, config_obj,
 				ordereddict.NewDict().
 					Set("From", self.uuid),
-				"Server.Internal.ClientInfoSnapshot")
+				artifacts.CLIENT_INFO_SNAPSHOT_READY)
 		}
 
-		logger := logging.GetLogger(config_obj, &logging.FrontendComponent)
 		logger.Info("<green>ClientInfo Manager</> Written snapshot for org %v in %v (%v records)",
 			services.GetOrgName(config_obj), time.Now().Sub(now), record_count)
 	}
@@ -316,9 +318,7 @@ func (self *Store) SaveSnapshot(
 	}
 	defer writer.Close()
 
-	writer.WriteJSONL(buffer.Bytes(), record_count)
-
-	return nil
+	return writer.WriteJSONL(buffer.Bytes(), record_count)
 }
 
 // Load data from the legacy client info data.

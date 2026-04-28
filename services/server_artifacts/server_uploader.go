@@ -12,10 +12,12 @@ import (
 	"github.com/go-errors/errors"
 	"www.velocidex.com/golang/velociraptor/accessors"
 	config_proto "www.velocidex.com/golang/velociraptor/config/proto"
+	"www.velocidex.com/golang/velociraptor/constants"
 	crypto_proto "www.velocidex.com/golang/velociraptor/crypto/proto"
 	"www.velocidex.com/golang/velociraptor/file_store"
 	"www.velocidex.com/golang/velociraptor/file_store/uploader"
 	"www.velocidex.com/golang/velociraptor/paths"
+	"www.velocidex.com/golang/velociraptor/paths/artifacts"
 	"www.velocidex.com/golang/velociraptor/services"
 	"www.velocidex.com/golang/velociraptor/uploads"
 	"www.velocidex.com/golang/velociraptor/utils"
@@ -105,7 +107,7 @@ func (self *ServerUploader) Upload(
 
 	row := ordereddict.NewDict().
 		Set("Timestamp", timestamp).
-		Set("ClientId", "server").
+		Set("ClientId", constants.VELOCIRAPTOR_SERVER_CLIENT_ID).
 		Set("VFSPath", result.Path).
 		Set("UploadName", store_as_name.String()).
 		Set("Accessor", "fs").
@@ -114,9 +116,9 @@ func (self *ServerUploader) Upload(
 
 	err = journal.PushRowsToArtifact(ctx, self.config_obj,
 		[]*ordereddict.Dict{row},
-		"System.Upload.Completion",
-		"server", self.session_id,
-	)
+		artifacts.UPLOAD_COMPLETION.
+			WithClientId(constants.VELOCIRAPTOR_SERVER_CLIENT_ID).
+			WithFlowId(self.session_id))
 	closer(result)
 	return result, err
 }

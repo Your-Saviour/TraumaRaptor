@@ -30,6 +30,7 @@ import (
 	"github.com/Velocidex/ordereddict"
 	"www.velocidex.com/golang/go-pe"
 	"www.velocidex.com/golang/velociraptor/accessors"
+	"www.velocidex.com/golang/velociraptor/accessors/file"
 	"www.velocidex.com/golang/velociraptor/acls"
 	"www.velocidex.com/golang/velociraptor/constants"
 	"www.velocidex.com/golang/velociraptor/utils"
@@ -53,6 +54,7 @@ func (self *AuthenticodeFunction) Call(ctx context.Context,
 	args *ordereddict.Dict) vfilter.Any {
 
 	defer vql_subsystem.RegisterMonitor(ctx, "authenticode", args)()
+	defer utils.RecoverVQL(scope)
 
 	err := vql_subsystem.CheckAccess(scope, acls.MACHINE_STATE)
 	if err != nil {
@@ -117,6 +119,12 @@ func (self *AuthenticodeFunction) Call(ctx context.Context,
 		// Normalize the output to make it easier to access
 		// important fields.
 		return output
+	}
+
+	err = file.CheckPath(normalized_path)
+	if err != nil {
+		scope.Log("authenticode: %v", err)
+		return vfilter.Null{}
 	}
 
 	// Maybe the file is in the cat file?

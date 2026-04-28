@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/Velocidex/ordereddict"
 	api_proto "www.velocidex.com/golang/velociraptor/api/proto"
 	config_proto "www.velocidex.com/golang/velociraptor/config/proto"
 	"www.velocidex.com/golang/velociraptor/file_store"
@@ -18,13 +19,25 @@ import (
 	"www.velocidex.com/golang/vfilter"
 )
 
+const (
+	FORCE_REFRESH = true
+)
+
 func syncFlowTables(
 	ctx context.Context,
 	config_obj *config_proto.Config,
 	launcher services.Launcher,
 	hunt_id string,
 	refresh_stats *HuntRefreshStats,
-	throttler *utils.Throttler) (*api_proto.HuntStats, error) {
+	throttler *utils.Throttler,
+	force bool) (*api_proto.HuntStats, error) {
+
+	// Keep track of the current hunts/flows we are working on for
+	// reporting.
+	current_hunt_stats := ordereddict.NewDict()
+	refresh_stats.CurrentHunts.Set(hunt_id, current_hunt_stats)
+
+	defer refresh_stats.CurrentHunts.Delete(hunt_id)
 
 	// Update the stats if needed.
 	stats := &api_proto.HuntStats{}
@@ -47,10 +60,17 @@ func syncFlowTables(
 	if err == nil {
 		enriched_reader.Close()
 
-		// Skip refreshing the enriched table if it is newer than 5 min
+		// Skip refreshing the enriched table if it is newer than 10 min
 		// old - this helps to reduce unnecessary updates.
-		if now.Sub(enriched_reader.MTime()) < HuntDispatcherRefresh(config_obj) {
-			return nil, utils.CancelledError
+		if !force &&
+			now.Sub(enriched_reader.MTime()) < HuntDispatcherRefresh(config_obj) {
+
+			refresh_stats.Lock()
+			refresh_stats.TotalHuntsSkipped++
+			refresh_stats.Unlock()
+
+			return nil, utils.Wrap(utils.CancelledError,
+				"Hunt reindex cancelled because it is still fresh")
 		}
 	}
 
@@ -67,6 +87,7 @@ func syncFlowTables(
 		return nil, err
 	}
 
+	count := 0
 	for json_str := range json_chan {
 		if throttler != nil {
 			throttler.Wait()
@@ -81,6 +102,12 @@ func syncFlowTables(
 		refresh_stats.Lock()
 		refresh_stats.TotalFlowsInspected++
 		refresh_stats.Unlock()
+
+		count++
+		current_hunt_stats.
+			Update("Count", count).
+			Update("Flow", participation_row.FlowId).
+			Update("Client", participation_row.ClientId)
 
 		// If the client is deleted or the flow disappeared, this will
 		// error out. We then ignore this row.
@@ -108,7 +135,7 @@ func syncFlowTables(
 			stats.TotalFinishedClients++
 		}
 
-		rs_writer.WriteJSONL([]byte(
+		err = rs_writer.WriteJSONL([]byte(
 			json.Format(`{"ClientId": %q, "Hostname": %q, "FlowId": %q, "StartedTime": %q, "State": %q, "Duration": %q, "TotalBytes": %q, "TotalRows": %q}
 `,
 				participation_row.ClientId,
@@ -119,6 +146,9 @@ func syncFlowTables(
 				flow.Context.ExecutionDuration/1000000000,
 				flow.Context.TotalUploadedBytes,
 				flow.Context.TotalCollectedRows)), 1)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return stats, nil
 }
@@ -145,7 +175,7 @@ func (self *HuntDispatcher) GetFlows(
 	// the original table.
 	if options.SortColumn != "" || options.FilterColumn != "" {
 		_, err := syncFlowTables(ctx, config_obj, launcher, hunt_id,
-			&HuntRefreshStats{}, nil)
+			NewHuntRefreshStats("GetFlows"), nil, !FORCE_REFRESH)
 		if err != nil && !errors.Is(err, utils.CancelledError) {
 			close(output_chan)
 			return output_chan, 0, err

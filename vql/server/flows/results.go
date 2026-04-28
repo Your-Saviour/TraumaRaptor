@@ -26,8 +26,10 @@ import (
 	"github.com/Velocidex/ordereddict"
 	"www.velocidex.com/golang/velociraptor/acls"
 	config_proto "www.velocidex.com/golang/velociraptor/config/proto"
+	"www.velocidex.com/golang/velociraptor/constants"
 	"www.velocidex.com/golang/velociraptor/file_store"
 	"www.velocidex.com/golang/velociraptor/paths"
+	"www.velocidex.com/golang/velociraptor/paths/artifact_modes"
 	artifact_paths "www.velocidex.com/golang/velociraptor/paths/artifacts"
 	"www.velocidex.com/golang/velociraptor/result_sets"
 	"www.velocidex.com/golang/velociraptor/services"
@@ -35,7 +37,6 @@ import (
 	"www.velocidex.com/golang/velociraptor/vql"
 	vql_subsystem "www.velocidex.com/golang/velociraptor/vql"
 	"www.velocidex.com/golang/velociraptor/vql/server/hunts"
-	vql_utils "www.velocidex.com/golang/velociraptor/vql/utils"
 	"www.velocidex.com/golang/vfilter"
 	"www.velocidex.com/golang/vfilter/arg_parser"
 )
@@ -319,28 +320,23 @@ func (self *SourcePluginArgs) isArtifactEvent(
 	scope vfilter.Scope, ctx context.Context,
 	config_obj *config_proto.Config) (is_event bool, client_id string, err error) {
 
-	repository, err := vql_utils.GetRepository(scope)
+	mode, err := artifact_paths.GetArtifactMode(ctx, config_obj, self.Artifact)
 	if err != nil {
 		return false, "", err
 	}
 
-	artifact_definition, pres := repository.Get(ctx, config_obj, self.Artifact)
-	if !pres {
-		return false, "", fmt.Errorf("Artifact %v not known", self.Artifact)
-	}
-
-	switch artifact_definition.Type {
-	case "client_event":
+	switch mode {
+	case artifact_modes.MODE_CLIENT_EVENT:
 		if self.ClientId == "" {
 			return false, "", fmt.Errorf(
 				"Artifact %v is a client event artifact, "+
 					"therefore a client id is required.",
-				artifact_definition.Name)
+				self.Artifact)
 		}
 		return true, self.ClientId, nil
 
-	case "server_event":
-		return true, "server", nil
+	case artifact_modes.MODE_SERVER_EVENT:
+		return true, constants.VELOCIRAPTOR_SERVER_CLIENT_ID, nil
 
 	default:
 		return false, "", nil

@@ -682,23 +682,32 @@
 
     The cache will ensure that `get_pid_query()` is only called once per
     unique Pid by comparing the key against the internal memory store.
-
   type: Function
+  version: 2
   args:
   - name: func
     type: LazyExpr
-    description: A function to evaluate
-    required: true
+    description: A function to evaluate (deprecated - use a lambda instead)
+  - name: lambda
+    type: vfilter.Lambda
+    description: 'A VQL lambda to evaluate with the key as parameter. eg. x=>x+1 '
   - name: name
     type: string
     description: The global name of this cache (needed when more than one)
   - name: key
-    type: string
+    type: Any
     description: Cache key to use.
-    required: true
   - name: period
     type: int64
     description: The latest age of the cache.
+  - name: filename
+    type: string
+    description: Filename for a persistent cache.
+  - name: max_size
+    type: uint64
+    description: Maximum size of the LRU (default 10000).
+  metadata:
+    permissions: FILESYSTEM_WRITE
   platforms:
   - darwin_amd64_cgo
   - darwin_arm64_cgo
@@ -1423,6 +1432,7 @@
   - linux_amd64_cgo
   - windows_386_cgo
   - windows_amd64_cgo
+  free_form_args: true
 - name: commandline_split
   description: |
     Split a commandline into separate components following the windows
@@ -2141,7 +2151,7 @@
     description: Password for HTTP Basic Authentication.
   - name: cloud_id
     type: string
-    description: Endpoint for the Elastic Service (https://elastic.co/cloud).
+    description: Endpoint for the [Elastic Cloud Service](https://elastic.co/cloud).
   - name: api_key
     type: string
     description: Base64-encoded token for authorization; if set, overrides username
@@ -3938,9 +3948,6 @@
 
     ### Notes
 
-    No caching is currently provided so this may generate a lot
-    of load on DNS servers when scanning many rows.
-
     1. In the GUI hunts are always created in the paused
     state. This is not the default state when using this function (all
     hunts are immediately active - if you want the hunt to be created
@@ -3960,6 +3967,9 @@
         expires=now() + 18000)
     FROM scope()
     ```
+
+    3. Hunt conditions are not additive! A hunt can only be targeted
+       to an operating system, or label but not both.
   type: Function
   version: 3
   args:
@@ -4165,6 +4175,24 @@
   - linux_amd64_cgo
   - windows_386_cgo
   - windows_amd64_cgo
+- name: hunt_reindex
+  description: |
+    Reindex a hunt.
+
+    This is sometimes necessary if hunt overview stats are
+    incorrect. This plugin will walk all hunt flows and re-tally all
+    the stats to reset the hunt overview into the correct values.
+
+    On some installtions this is a very expensive operation as it
+    generates a lot of IO.
+
+  type: Plugin
+  args:
+  - name: hunt_id
+    type: string
+    description: The hunt to reindex. If not specified we index all hunts
+  platforms:
+  - linux_amd64_cgo
 - name: hunt_results
   description: |
     Retrieve the results of a hunt.
@@ -5734,12 +5762,11 @@
     Providing the `filename` parameter allows the data to be stored to a
     file. This is helpful when the query is very large or the results
     need to be re-used in another query.
-
   type: Function
-  version: 2
+  version: 3
   args:
   - name: query
-    type: LazyExpr
+    type: StoredQuery
     description: Query to expand into memory
     required: true
   - name: key
@@ -5752,6 +5779,9 @@
   - name: name
     type: string
     description: The name of this cache.
+  - name: filename
+    type: string
+    description: Filename for a persistent cache.
   category: popular
   platforms:
   - darwin_amd64_cgo
@@ -6584,7 +6614,7 @@
     description: The accessor to use
   - name: profile
     type: string
-    description: Profile to use (see https://github.com/Velocidex/vtypes).
+    description: Profile to use (see [vfilter](https://github.com/Velocidex/vtypes)).
   - name: struct
     type: string
     description: Name of the struct in the profile to instantiate.
@@ -7964,11 +7994,15 @@
   description: |
     Scan processes using yara rules.
 
-    This plugin uses yara's own engine to scan process memory for the signatures.
+    This plugin uses yara's own engine to scan process memory for the
+    signatures.
 
     {{% notice note %}}
 
-    Process memory access depends on having the [SeDebugPrivilege](https://support.microsoft.com/en-au/help/131065/how-to-obtain-a-handle-to-any-process-with-sedebugprivilege) which depends on how Velociraptor was started. Even when running as System, some processes are not accessible.
+    Process memory access depends on having the
+    [SeDebugPrivilege](https://mskb.pkisolutions.com/kb/131065) which
+    depends on how Velociraptor was started. Even when running as
+    System, some processes are not accessible.
 
     {{% /notice %}}
   type: Plugin
@@ -9564,11 +9598,15 @@
     artifact (either as a VQL query running on the server or perhaps
     an external program waiting for this event via the API.
   type: Function
+  version: 2
   args:
   - name: artifact
     type: string
     description: The artifact name to send the event to.
     required: true
+  - name: client_id
+    type: string
+    description: The client_id for this event in case of a client_event artifact.
   - name: row
     type: ordereddict.Dict
     description: The row to send to the artifact
@@ -11305,7 +11343,13 @@
   - windows_386_cgo
   - windows_amd64_cgo
 - name: upload_gcs
-  description: Upload files to GCS.
+  description: |
+    Upload files to GCS.
+
+    NOTE: This plugin is optional and not included by default from
+    Version 0.76 on. Use the `upload_s3()` plugin instead.
+
+    You can read how to [How To Set Up A GCS Bucket For File Uploads](https://docs.velociraptor.app/knowledge_base/tips/setup_gcs_storage)
   type: Function
   args:
   - name: file
@@ -11338,7 +11382,19 @@
   - windows_386_cgo
   - windows_amd64_cgo
 - name: upload_s3
-  description: Upload files to S3.
+  description: |
+    Upload files to S3.
+
+    This function can be used to upload to an AWS S3 bucket or to a
+    MinIO self hosted bucket.
+
+    Read [How To Set Up A MinIO For File
+    Uploads](https://docs.velociraptor.app/knowledge_base/tips/dropbox_server)
+
+    [This
+    presentation](https://training.velociraptor.app//modules/offline_collection/cloud_upload.html#/8)
+    shows how to safely configure an AWS bucket for use with this
+    plugin.
   type: Function
   version: 3
   args:
@@ -11708,6 +11764,35 @@
   - linux_amd64_cgo
   - windows_386_cgo
   - windows_amd64_cgo
+- name: user_message
+  description: Send the user a message which will appear in the user notification
+    view.
+  type: Function
+  version: 1
+  args:
+  - name: user
+    type: string
+    description: The user to create or update.
+    required: true
+  - name: message
+    type: ordereddict.Dict
+    description: The message to deliver to the user.
+  platforms:
+  - linux_amd64_cgo
+  free_form_args: true
+- name: user_messages
+  description: Emit the user's console messages.
+  type: Plugin
+  version: 1
+  args:
+  - name: clear
+    type: bool
+    description: If set also clear messages.
+  - name: user
+    type: string
+    description: If set we read another user's messages (must be admin).
+  platforms:
+  - linux_amd64_cgo
 - name: user_options
   description: |
     Update and read the user GUI options

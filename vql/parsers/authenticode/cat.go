@@ -13,9 +13,11 @@ import (
 	"github.com/Velocidex/ordereddict"
 	"github.com/Velocidex/pkcs7"
 	"www.velocidex.com/golang/go-pe"
+	"www.velocidex.com/golang/velociraptor/accessors/file"
 	config_proto "www.velocidex.com/golang/velociraptor/config/proto"
 	"www.velocidex.com/golang/velociraptor/constants"
 	"www.velocidex.com/golang/velociraptor/utils"
+	"www.velocidex.com/golang/velociraptor/utils/allocs"
 	vql_subsystem "www.velocidex.com/golang/velociraptor/vql"
 	windows "www.velocidex.com/golang/velociraptor/vql/windows"
 	"www.velocidex.com/golang/vfilter"
@@ -67,7 +69,7 @@ func VerifyCatalogSignature(
 	defer windows.CryptCATAdminReleaseContext(CatAdminHandle, 0)
 
 	hash_length := uint32(100)
-	hash := utils.AllocateBuff(100)
+	hash := allocs.AllocateAlignedBuff(100)
 
 	err = windows.CryptCATAdminCalcHashFromFileHandle2(CatAdminHandle, fd.Fd(),
 		&hash_length, &hash[0], 0)
@@ -151,6 +153,11 @@ func ParseCatFile(cat_file string, output *ordereddict.Dict, verbose bool) error
 	// replaced later with the proper parse.
 	output.Update("_ExtraInfo", ordereddict.NewDict().
 		Set("Catalog", cat_file))
+
+	err := file.CheckPath(cat_file)
+	if err != nil {
+		return err
+	}
 
 	cat_fd, err := os.Open(cat_file)
 	if err != nil {

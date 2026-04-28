@@ -76,10 +76,12 @@ import (
 	api_proto "www.velocidex.com/golang/velociraptor/api/proto"
 	artifacts_proto "www.velocidex.com/golang/velociraptor/artifacts/proto"
 	config_proto "www.velocidex.com/golang/velociraptor/config/proto"
+	"www.velocidex.com/golang/velociraptor/constants"
 	"www.velocidex.com/golang/velociraptor/datastore"
 	flows_proto "www.velocidex.com/golang/velociraptor/flows/proto"
 	"www.velocidex.com/golang/velociraptor/json"
 	"www.velocidex.com/golang/velociraptor/paths"
+	"www.velocidex.com/golang/velociraptor/paths/artifact_modes"
 	"www.velocidex.com/golang/velociraptor/services"
 	"www.velocidex.com/golang/velociraptor/utils"
 	"www.velocidex.com/golang/velociraptor/vql/acl_managers"
@@ -332,8 +334,9 @@ func CalculateNotebookArtifact(
 					default_limit = config_obj.Defaults.NotebookDefaultNewCellRows
 				}
 
-				switch paths.ModeNameToMode(artifact.Type) {
-				case paths.MODE_CLIENT_EVENT, paths.MODE_SERVER_EVENT:
+				switch artifact_modes.ModeNameToMode(artifact.Type) {
+				case artifact_modes.MODE_CLIENT_EVENT,
+					artifact_modes.MODE_SERVER_EVENT:
 					new_source.Notebook = append(new_source.Notebook,
 						&artifacts_proto.NotebookSourceCell{
 							Type:   "vql",
@@ -796,7 +799,7 @@ func getSpecFromEventArtifact(
 	config_obj *config_proto.Config,
 	artifact, client_id string) (res []*flows_proto.ArtifactSpec, err error) {
 
-	if client_id == "server" {
+	if client_id == constants.VELOCIRAPTOR_SERVER_CLIENT_ID {
 		server_monitoring_service, err := services.GetServerEventManager(
 			config_obj)
 		if err != nil {

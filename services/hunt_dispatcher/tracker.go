@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"github.com/Velocidex/ordereddict"
+	"www.velocidex.com/golang/velociraptor/utils"
 	"www.velocidex.com/golang/vfilter"
 )
 
+// Stats about hunt refresh
 type HuntRefreshStats struct {
 	sync.Mutex
 
@@ -17,7 +19,33 @@ type HuntRefreshStats struct {
 	Duration            time.Duration
 	TotalHunts          uint64
 	TotalFlowsInspected uint64
+	TotalHuntsSkipped   uint64
 	TotalFlows          uint64
+	CurrentHunts        *ordereddict.Dict
+}
+
+func (self *HuntRefreshStats) ToDict() *ordereddict.Dict {
+	self.Lock()
+	defer self.Unlock()
+
+	return ordereddict.NewDict().
+		Set("Type", self.Type).
+		Set("Time", self.Time.UTC().Format(time.RFC3339)).
+		Set("Ago", time.Now().Sub(self.Time).Round(time.Second).String()).
+		Set("Duration", self.Duration.Round(time.Second).String()).
+		Set("TotalHunts", self.TotalHunts).
+		Set("TotalHuntsSkipped", self.TotalHuntsSkipped).
+		Set("TotalFlows", self.TotalFlows).
+		Set("TotalFlowsInspected", self.TotalFlowsInspected).
+		Set("CurrentHunts", self.CurrentHunts)
+}
+
+func NewHuntRefreshStats(name string) *HuntRefreshStats {
+	return &HuntRefreshStats{
+		Type:         name,
+		Time:         utils.GetTime().Now(),
+		CurrentHunts: ordereddict.NewDict(),
+	}
 }
 
 type HuntDispatcherTracker struct {
@@ -40,20 +68,13 @@ func (self *HuntDispatcherTracker) WriteProfile(
 	ctx context.Context, scope vfilter.Scope,
 	output_chan chan vfilter.Row) {
 	self.mu.Lock()
-	defer self.mu.Unlock()
-
+	var refreshes []*HuntRefreshStats
 	for _, item := range self.RecentRefresh {
-		item.Lock()
-		res := ordereddict.NewDict().
-			Set("Type", item.Type).
-			Set("Time", item.Time.UTC().Format(time.RFC3339)).
-			Set("Ago", time.Now().Sub(item.Time).Round(time.Second).String()).
-			Set("Duration", item.Duration.Round(time.Second).String()).
-			Set("TotalHunts", item.TotalHunts).
-			Set("TotalFlows", item.TotalFlows).
-			Set("TotalFlowsInspected", item.TotalFlowsInspected)
-		item.Unlock()
+		refreshes = append(refreshes, item)
+	}
+	self.mu.Unlock()
 
-		output_chan <- res
+	for _, item := range refreshes {
+		output_chan <- item.ToDict()
 	}
 }

@@ -37,14 +37,6 @@ func (self MockFrontendService) GetMinionCount() int {
 	return 1
 }
 
-func (self MockFrontendService) SetGlobalMessage(
-	message *api_proto.GlobalUserMessage) {
-}
-
-func (self MockFrontendService) GetGlobalMessages() []*api_proto.GlobalUserMessage {
-	return nil
-}
-
 func (self MockFrontendService) GetPublicUrl(
 	config_obj *config_proto.Config) (res *url.URL, err error) {
 	return frontend.GetPublicUrl(config_obj)
@@ -195,7 +187,11 @@ func (self *ReplicationTestSuite) TestSendingEvents() {
 
 	events = nil
 	err = journal_service.PushRowsToArtifact(self.Ctx, self.ConfigObj,
-		my_event, "Test.Artifact", "C.1234", "F.123")
+		my_event, services.JournalOptions{
+			ArtifactName: "Test.Artifact",
+			ClientId:     "C.1234",
+			FlowId:       "F.123",
+		})
 	assert.NoError(self.T(), err)
 
 	// Wait to see if the first event was properly delivered.
@@ -221,7 +217,11 @@ func (self *ReplicationTestSuite) TestSendingEvents() {
 	// into the queue - this should overflow into the file.
 	for i := 0; i < 1000; i++ {
 		err = journal_service.PushRowsToArtifact(self.Ctx, self.ConfigObj,
-			my_event, "Test.Artifact", "C.1234", "F.123")
+			my_event, services.JournalOptions{
+				ArtifactName: "Test.Artifact",
+				ClientId:     "C.1234",
+				FlowId:       "F.123",
+			})
 		assert.NoError(self.T(), err)
 	}
 

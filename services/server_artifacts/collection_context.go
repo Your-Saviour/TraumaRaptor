@@ -22,6 +22,7 @@ import (
 	flows_proto "www.velocidex.com/golang/velociraptor/flows/proto"
 	"www.velocidex.com/golang/velociraptor/logging"
 	"www.velocidex.com/golang/velociraptor/paths"
+	"www.velocidex.com/golang/velociraptor/paths/artifact_modes"
 	artifact_paths "www.velocidex.com/golang/velociraptor/paths/artifacts"
 	"www.velocidex.com/golang/velociraptor/result_sets"
 	"www.velocidex.com/golang/velociraptor/services"
@@ -330,14 +331,16 @@ func (self *contextManager) maybeSendCompletionMessage(ctx context.Context) {
 		Set("Timestamp", utils.GetTime().Now().UTC().Unix()).
 		Set("Flow", flow_context).
 		Set("FlowId", self.session_id).
-		Set("ClientId", "server")
+		Set("ClientId", constants.VELOCIRAPTOR_SERVER_CLIENT_ID)
 
 	journal, err := services.GetJournal(self.config_obj)
 	if err != nil {
 		return
 	}
-	journal.PushRowsToArtifactAsync(ctx, self.config_obj,
-		row, "System.Flow.Completion")
+	journal.PushRowsToArtifactAsync(
+		ctx, self.config_obj, row,
+		artifact_paths.FLOW_COMPLETION.WithClientId(
+			constants.VELOCIRAPTOR_SERVER_CLIENT_ID))
 }
 
 func (self *contextManager) RunQuery(
@@ -388,7 +391,8 @@ func (self *contextManager) RunQuery(
 		effective_principal = principal
 	}
 
-	flow_path_manager := paths.NewFlowPathManager("server", self.session_id)
+	flow_path_manager := paths.NewFlowPathManager(
+		constants.VELOCIRAPTOR_SERVER_CLIENT_ID, self.session_id)
 	scope := manager.BuildScope(services.ScopeBuilder{
 		Config: self.config_obj,
 
@@ -489,7 +493,8 @@ func (self *contextManager) RunQuery(
 		opts := vql_subsystem.EncOptsFromScope(scope)
 
 		artifact_path_manager := artifact_paths.NewArtifactPathManagerWithMode(
-			self.config_obj, "server", self.session_id, name, paths.MODE_SERVER)
+			self.config_obj, constants.VELOCIRAPTOR_SERVER_CLIENT_ID,
+			self.session_id, name, artifact_modes.MODE_SERVER)
 		file_store_factory := file_store.GetFileStore(self.config_obj)
 		rs_writer, err = result_sets.NewResultSetWriter(
 			file_store_factory, artifact_path_manager.Path(), opts,

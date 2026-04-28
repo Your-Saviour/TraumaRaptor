@@ -15,6 +15,7 @@ import (
 	config_proto "www.velocidex.com/golang/velociraptor/config/proto"
 	"www.velocidex.com/golang/velociraptor/crypto"
 	"www.velocidex.com/golang/velociraptor/http_comms"
+	"www.velocidex.com/golang/velociraptor/paths/artifacts"
 	"www.velocidex.com/golang/velociraptor/services"
 	"www.velocidex.com/golang/velociraptor/utils"
 )
@@ -317,7 +318,7 @@ func ws_send_client_messages(
 				[]*ordereddict.Dict{
 					ordereddict.NewDict().
 						Set("ClientId", source)},
-				"Server.Internal.Enrollment", source, "")
+				artifacts.ENROLLMENT_QUEUE)
 			if err != nil {
 				return send_error(ws, err, http.StatusServiceUnavailable)
 			}
@@ -343,8 +344,7 @@ func ws_send_client_messages(
 					Set("RemoteAddr", message_info.RemoteAddr).
 					Set("UserAgent", req.UserAgent())
 				journal.PushRowsToArtifactAsync(ctx, org_config_obj,
-					info,
-					"Server.Internal.ClientConflict")
+					info, artifacts.CLIENT_CONFLICT)
 			}
 			return send_error(ws, conflictError, http.StatusConflict)
 		}
@@ -368,11 +368,16 @@ func ws_send_client_messages(
 		}()
 
 		for {
+			// Process the first time around, then just keep feeding
+			// an empty message_info to drain our client queue.
 			err := send_one_message(ctx, ws, server_obj,
 				org_config_obj, message_info)
 			if err != nil {
 				return err
 			}
+
+			// This ensures the messages are processed only once.
+			message_info.RawCompressed = nil
 		}
 	}
 }

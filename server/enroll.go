@@ -24,6 +24,7 @@ import (
 	config_proto "www.velocidex.com/golang/velociraptor/config/proto"
 	crypto_proto "www.velocidex.com/golang/velociraptor/crypto/proto"
 	"www.velocidex.com/golang/velociraptor/logging"
+	"www.velocidex.com/golang/velociraptor/paths/artifacts"
 	"www.velocidex.com/golang/velociraptor/services"
 )
 
@@ -53,5 +54,5 @@ func enroll(
 		[]*ordereddict.Dict{
 			ordereddict.NewDict().
 				Set("ClientId", client_id)},
-		"Server.Internal.Enrollment", client_id, "")
+		artifacts.ENROLLMENT_QUEUE)
 }

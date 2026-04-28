@@ -23,6 +23,7 @@ import (
 	flows_proto "www.velocidex.com/golang/velociraptor/flows/proto"
 	"www.velocidex.com/golang/velociraptor/json"
 	"www.velocidex.com/golang/velociraptor/paths"
+	"www.velocidex.com/golang/velociraptor/paths/artifact_modes"
 	"www.velocidex.com/golang/velociraptor/paths/artifacts"
 	"www.velocidex.com/golang/velociraptor/result_sets"
 	"www.velocidex.com/golang/velociraptor/services"
@@ -204,7 +205,7 @@ func (self ImportCollectionFunction) importHunt(
 						FlowId:   flow.SessionId,
 					},
 				})},
-			"Server.Internal.HuntModification", flow.ClientId, "")
+			artifacts.HUNT_MODIFICATIONS)
 	}
 
 	return hunt_info, nil
@@ -310,7 +311,7 @@ func (self ImportCollectionFunction) importFlow(
 	for _, artifact := range collection_context.ArtifactsWithResults {
 		artifact_path_manager := artifacts.NewArtifactPathManagerWithMode(
 			config_obj, client_id, collection_context.SessionId,
-			artifact, paths.MODE_CLIENT)
+			artifact, artifact_modes.MODE_CLIENT)
 		err = self.copyResultSet(ctx, config_obj, scope,
 			accessor, root.Append("results", artifact+".json"),
 			artifact_path_manager.Path(),
@@ -346,9 +347,9 @@ func (self ImportCollectionFunction) importFlow(
 	}
 	err = journal.PushRowsToArtifact(ctx, config_obj,
 		[]*ordereddict.Dict{row},
-		"System.Flow.Completion", collection_context.ClientId,
-		collection_context.SessionId,
-	)
+		artifacts.FLOW_COMPLETION.
+			WithClientId(collection_context.ClientId).
+			WithFlowId(collection_context.SessionId))
 
 	return collection_context, err
 }
@@ -528,7 +529,7 @@ func (self ImportCollectionFunction) checkClientIdExists(
 	client_info *services.ClientInfo) error {
 
 	// This is a well known client
-	if client_info.ClientId == "server" {
+	if client_info.ClientId == constants.VELOCIRAPTOR_SERVER_CLIENT_ID {
 		return nil
 	}
 
@@ -595,7 +596,7 @@ func (self ImportCollectionFunction) copyResultSet(
 
 	flush := func() {
 		if count > 0 {
-			rs_writer.WriteJSONL(buffer.Bytes(), count)
+			_ = rs_writer.WriteJSONL(buffer.Bytes(), count)
 			count = 0
 			buffer.Reset()
 		}

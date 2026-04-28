@@ -6,6 +6,7 @@ package server_monitoring
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -15,10 +16,12 @@ import (
 	"www.velocidex.com/golang/velociraptor/actions"
 	actions_proto "www.velocidex.com/golang/velociraptor/actions/proto"
 	config_proto "www.velocidex.com/golang/velociraptor/config/proto"
+	"www.velocidex.com/golang/velociraptor/constants"
 	"www.velocidex.com/golang/velociraptor/datastore"
 	flows_proto "www.velocidex.com/golang/velociraptor/flows/proto"
 	"www.velocidex.com/golang/velociraptor/logging"
 	"www.velocidex.com/golang/velociraptor/paths"
+	"www.velocidex.com/golang/velociraptor/paths/artifact_modes"
 	"www.velocidex.com/golang/velociraptor/paths/artifacts"
 	"www.velocidex.com/golang/velociraptor/services"
 	"www.velocidex.com/golang/velociraptor/utils"
@@ -124,7 +127,7 @@ func (self *EventTable) ProcessServerMetadataModificationEvent(
 	event *ordereddict.Dict) {
 
 	client_id, pres := event.GetString("client_id")
-	if !pres || client_id != "server" {
+	if !pres || client_id != constants.VELOCIRAPTOR_SERVER_CLIENT_ID {
 		return
 	}
 
@@ -301,6 +304,22 @@ func (self *EventTable) RunQuery(
 	wg *sync.WaitGroup,
 	vql_request *actions_proto.VQLCollectorArgs) error {
 
+	artifact_name := getArtifactName(vql_request)
+	mode, err := artifacts.GetArtifactMode(ctx, config_obj, artifact_name)
+	if err != nil {
+		return err
+	}
+
+	// Be more strict of the type of artifacts we can run since they
+	// are running as root.
+	if mode != artifact_modes.MODE_SERVER_EVENT {
+		return fmt.Errorf(
+			"Server monitoring can only run artifacts of type SERVER_EVENT, not %v", mode.String())
+	}
+
+	// Server event queries are always running as superuser.
+	principal := utils.GetSuperuserName(config_obj)
+
 	journal, err := services.GetJournal(config_obj)
 	if err != nil {
 		return err
@@ -316,19 +335,23 @@ func (self *EventTable) RunQuery(
 		return err
 	}
 
-	artifact_name := getArtifactName(vql_request)
+	journal_opts := services.JournalOptions{
+		ArtifactName: artifact_name,
+		ArtifactType: artifact_modes.MODE_SERVER_EVENT,
+		Username:     principal,
+	}
 
 	// We write the logs directly to files.
-	log_path_manager, err := artifacts.NewArtifactLogPathManager(ctx,
-		config_obj, "server", "", artifact_name)
-	if err != nil {
-		return err
-	}
+	log_path_manager := artifacts.NewArtifactLogPathManagerWithMode(
+		config_obj, constants.VELOCIRAPTOR_SERVER_CLIENT_ID, "",
+		artifact_name, artifact_modes.MODE_SERVER_EVENT)
+
 	self.logger = &serverLogger{
 		config_obj:   self.config_obj,
 		path_manager: log_path_manager,
 		ctx:          ctx,
 		artifact:     artifact_name,
+		principal:    principal,
 	}
 
 	builder := services.ScopeBuilder{
@@ -337,7 +360,7 @@ func (self *EventTable) RunQuery(
 		// artifact launches other artifacts then it will indicate the
 		// creator was the server.
 		ACLManager: acl_managers.NewServerACLManager(
-			self.config_obj, utils.GetSuperuserName(config_obj)),
+			self.config_obj, principal),
 		Env:        ordereddict.NewDict(),
 		Repository: repository,
 		Logger:     log.New(self.logger, "", 0),
@@ -405,8 +428,8 @@ func (self *EventTable) RunQuery(
 						Set("_ts", utils.GetTime().Now().Unix())
 
 					// Write event to the journal asynchronously.
-					journal.PushRowsToArtifactAsync(ctx, config_obj,
-						event, artifact_name)
+					journal.PushRowsToArtifactAsync(
+						ctx, config_obj, event, journal_opts)
 				}
 			}
 			self.tracer.Clear(query.VQL)
@@ -473,12 +496,12 @@ func (self *EventTable) Start(
 	}()
 
 	events, cancel := journal.Watch(
-		ctx, "Server.Internal.ArtifactModification",
+		ctx, artifacts.ARTIFACT_MODIFICATION,
 		"server_monitoring_service")
 	defer cancel()
 
 	metadata_mod_event, metadata_mod_event_cancel := journal.Watch(
-		ctx, "Server.Internal.MetadataModifications",
+		ctx, artifacts.CLIENT_METADATA_MODIFICATION,
 		"server_monitoring_service")
 	defer metadata_mod_event_cancel()
 
@@ -520,7 +543,10 @@ func NewServerMonitoringService(
 	if err != nil || artifacts.Artifacts == nil {
 		// No monitoring rules found, set defaults.
 		artifacts = &flows_proto.ArtifactCollectorArgs{
-			Artifacts: append([]string{"Server.Monitor.Health"},
+			Artifacts: append([]string{
+				"Server.Monitor.Health",
+				"Server.Monitoring.RSSFeeds",
+			},
 				config_obj.Frontend.DefaultServerMonitoringArtifacts...),
 		}
 	}

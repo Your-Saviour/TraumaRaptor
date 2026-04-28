@@ -2,6 +2,7 @@ package hunt_manager_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -12,11 +13,12 @@ import (
 	actions_proto "www.velocidex.com/golang/velociraptor/actions/proto"
 	api_proto "www.velocidex.com/golang/velociraptor/api/proto"
 	crypto_proto "www.velocidex.com/golang/velociraptor/crypto/proto"
-	"www.velocidex.com/golang/velociraptor/datastore"
 	"www.velocidex.com/golang/velociraptor/file_store/test_utils"
 	flows_proto "www.velocidex.com/golang/velociraptor/flows/proto"
 	"www.velocidex.com/golang/velociraptor/paths"
+	"www.velocidex.com/golang/velociraptor/paths/artifacts"
 	"www.velocidex.com/golang/velociraptor/services"
+	"www.velocidex.com/golang/velociraptor/services/hunt_dispatcher"
 	"www.velocidex.com/golang/velociraptor/services/hunt_manager"
 	"www.velocidex.com/golang/velociraptor/services/launcher"
 	"www.velocidex.com/golang/velociraptor/utils"
@@ -24,6 +26,10 @@ import (
 	"www.velocidex.com/golang/velociraptor/vtesting"
 
 	_ "www.velocidex.com/golang/velociraptor/result_sets/timed"
+)
+
+const (
+	FORCE_REFRESH = hunt_dispatcher.FORCE_REFRESH
 )
 
 type HuntTestSuite struct {
@@ -40,6 +46,8 @@ func (self *HuntTestSuite) SetupTest() {
 	self.ConfigObj.Services.FrontendServer = true
 	self.ConfigObj.Services.HuntDispatcher = true
 	self.ConfigObj.Services.HuntManager = true
+
+	//hunt_dispatcher.DEBUG = true
 
 	self.TestSuite.SetupTest()
 
@@ -70,27 +78,24 @@ func (self *HuntTestSuite) TestHuntManager() {
 		Expires:      uint64(time.Now().Add(7*24*time.Hour).UTC().UnixNano() / 1000),
 	}
 
-	db, err := datastore.GetDB(self.ConfigObj)
-	assert.NoError(t, err)
-
-	hunt_path_manager := paths.NewHuntPathManager(hunt_obj.HuntId)
-	err = db.SetSubject(self.ConfigObj, hunt_path_manager.Path(), hunt_obj)
-	assert.NoError(t, err)
-
 	hunt_dispatcher, err := services.GetHuntDispatcher(self.ConfigObj)
 	assert.NoError(t, err)
-	hunt_dispatcher.Refresh(self.Ctx, self.ConfigObj)
+
+	_, err = hunt_dispatcher.CreateHunt(
+		self.Ctx, self.ConfigObj, acl_managers.NullACLManager{}, hunt_obj)
+	assert.NoError(self.T(), err)
 
 	// Simulate a System.Hunt.Participation event
 	journal, err := services.GetJournal(self.ConfigObj)
 	assert.NoError(t, err)
 
-	journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
+	err = journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("HuntId", self.hunt_id).
 			Set("ClientId", self.client_id),
 		},
-		"System.Hunt.Participation", self.client_id, "")
+		artifacts.HUNT_PARTICIPATION)
+	assert.NoError(t, err)
 
 	indexer, err := services.GetIndexer(self.ConfigObj)
 	assert.NoError(self.T(), err)
@@ -134,27 +139,25 @@ func (self *HuntTestSuite) TestHuntWithLabelClientNoLabel() {
 		},
 	}
 
-	db, err := datastore.GetDB(self.ConfigObj)
-	assert.NoError(t, err)
-
-	hunt_path_manager := paths.NewHuntPathManager(hunt_obj.HuntId)
-	err = db.SetSubject(self.ConfigObj, hunt_path_manager.Path(), hunt_obj)
-	assert.NoError(t, err)
-
 	hunt_dispatcher, err := services.GetHuntDispatcher(self.ConfigObj)
-	hunt_dispatcher.Refresh(self.Ctx, self.ConfigObj)
+	hunt_dispatcher.Refresh(self.Ctx, self.ConfigObj, FORCE_REFRESH)
+
+	_, err = hunt_dispatcher.CreateHunt(
+		self.Ctx, self.ConfigObj, acl_managers.NullACLManager{}, hunt_obj)
+	assert.NoError(self.T(), err)
 
 	// Simulate a System.Hunt.Participation event
 	journal, err := services.GetJournal(self.ConfigObj)
 	assert.NoError(t, err)
 
-	journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
+	err = journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("HuntId", self.hunt_id).
 			Set("ClientId", self.client_id).
 			Set("Fqdn", "MyHost"),
 		},
-		"System.Hunt.Participation", self.client_id, "")
+		artifacts.HUNT_PARTICIPATION)
+	assert.NoError(t, err)
 
 	time.Sleep(time.Second)
 
@@ -206,22 +209,17 @@ func (self *HuntTestSuite) TestHuntWithLabelClientHasLabelDifferentCase() {
 		},
 	}
 
-	db, err := datastore.GetDB(self.ConfigObj)
-	assert.NoError(t, err)
-
-	hunt_path_manager := paths.NewHuntPathManager(hunt_obj.HuntId)
-	err = db.SetSubject(self.ConfigObj, hunt_path_manager.Path(), hunt_obj)
-	assert.NoError(t, err)
-
 	labeler := services.GetLabeler(self.ConfigObj)
-
-	err = labeler.SetClientLabel(
+	err := labeler.SetClientLabel(
 		context.Background(), self.ConfigObj, self.client_id, "lAbEl")
 	assert.NoError(t, err)
 
 	hunt_dispatcher, err := services.GetHuntDispatcher(self.ConfigObj)
 	assert.NoError(t, err)
-	hunt_dispatcher.Refresh(self.Ctx, self.ConfigObj)
+
+	_, err = hunt_dispatcher.CreateHunt(
+		self.Ctx, self.ConfigObj, acl_managers.NullACLManager{}, hunt_obj)
+	assert.NoError(self.T(), err)
 
 	// Simulate a System.Hunt.Participation event
 	journal, err := services.GetJournal(self.ConfigObj)
@@ -229,13 +227,14 @@ func (self *HuntTestSuite) TestHuntWithLabelClientHasLabelDifferentCase() {
 
 	flow_id := hunt_obj.StartRequest.FlowId
 
-	journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
+	err = journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("HuntId", self.hunt_id).
 			Set("ClientId", self.client_id).
 			Set("Fqdn", "MyHost"),
 		},
-		"System.Hunt.Participation", self.client_id, "")
+		artifacts.HUNT_PARTICIPATION)
+	assert.NoError(t, err)
 
 	indexer, err := services.GetIndexer(self.ConfigObj)
 	assert.NoError(self.T(), err)
@@ -270,28 +269,25 @@ func (self *HuntTestSuite) TestHuntWithOverride() {
 		Expires:      uint64(time.Now().Add(7*24*time.Hour).UTC().UnixNano() / 1000),
 	}
 
-	db, err := datastore.GetDB(self.ConfigObj)
-	assert.NoError(t, err)
-
-	hunt_path_manager := paths.NewHuntPathManager(hunt_obj.HuntId)
-	err = db.SetSubject(self.ConfigObj, hunt_path_manager.Path(), hunt_obj)
-	assert.NoError(t, err)
-
 	hunt_dispatcher, err := services.GetHuntDispatcher(self.ConfigObj)
 	assert.NoError(t, err)
-	hunt_dispatcher.Refresh(self.Ctx, self.ConfigObj)
+
+	_, err = hunt_dispatcher.CreateHunt(
+		self.Ctx, self.ConfigObj, acl_managers.NullACLManager{}, hunt_obj)
+	assert.NoError(self.T(), err)
 
 	// Simulate a System.Hunt.Participation event
 	journal, err := services.GetJournal(self.ConfigObj)
 	assert.NoError(t, err)
 
-	journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
+	err = journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("HuntId", self.hunt_id).
 			Set("ClientId", self.client_id).
 			Set("Override", true),
 		},
-		"System.Hunt.Participation", self.client_id, "")
+		artifacts.HUNT_PARTICIPATION)
+	assert.NoError(t, err)
 
 	indexer, err := services.GetIndexer(self.ConfigObj)
 	assert.NoError(self.T(), err)
@@ -337,33 +333,30 @@ func (self *HuntTestSuite) TestHuntWithLabelClientHasLabel() {
 		},
 	}
 
-	db, err := datastore.GetDB(self.ConfigObj)
-	assert.NoError(t, err)
-
-	hunt_path_manager := paths.NewHuntPathManager(hunt_obj.HuntId)
-	err = db.SetSubject(self.ConfigObj, hunt_path_manager.Path(), hunt_obj)
-	assert.NoError(t, err)
-
 	labeler := services.GetLabeler(self.ConfigObj)
-	err = labeler.SetClientLabel(
+	err := labeler.SetClientLabel(
 		context.Background(), self.ConfigObj, self.client_id, "MyLabel")
 	assert.NoError(t, err)
 
 	hunt_dispatcher, err := services.GetHuntDispatcher(self.ConfigObj)
 	assert.NoError(t, err)
-	hunt_dispatcher.Refresh(self.Ctx, self.ConfigObj)
+
+	_, err = hunt_dispatcher.CreateHunt(
+		self.Ctx, self.ConfigObj, acl_managers.NullACLManager{}, hunt_obj)
+	assert.NoError(self.T(), err)
 
 	// Simulate a System.Hunt.Participation event
 	journal, err := services.GetJournal(self.ConfigObj)
 	assert.NoError(t, err)
 
-	journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
+	err = journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("HuntId", self.hunt_id).
 			Set("ClientId", self.client_id).
 			Set("Fqdn", "MyHost"),
 		},
-		"System.Hunt.Participation", self.client_id, "")
+		artifacts.HUNT_PARTICIPATION)
+	assert.NoError(t, err)
 
 	indexer, err := services.GetIndexer(self.ConfigObj)
 	assert.NoError(t, err)
@@ -414,15 +407,8 @@ func (self *HuntTestSuite) TestHuntWithLabelClientHasExcludedLabel() {
 
 	flow_id := hunt_obj.StartRequest.FlowId
 
-	db, err := datastore.GetDB(self.ConfigObj)
-	assert.NoError(t, err)
-
-	hunt_path_manager := paths.NewHuntPathManager(hunt_obj.HuntId)
-	err = db.SetSubject(self.ConfigObj, hunt_path_manager.Path(), hunt_obj)
-	assert.NoError(t, err)
-
 	labeler := services.GetLabeler(self.ConfigObj)
-	err = labeler.SetClientLabel(
+	err := labeler.SetClientLabel(
 		context.Background(), self.ConfigObj, self.client_id, "MyLabel")
 	assert.NoError(t, err)
 
@@ -433,19 +419,23 @@ func (self *HuntTestSuite) TestHuntWithLabelClientHasExcludedLabel() {
 
 	hunt_dispatcher, err := services.GetHuntDispatcher(self.ConfigObj)
 	assert.NoError(t, err)
-	hunt_dispatcher.Refresh(self.Ctx, self.ConfigObj)
+
+	_, err = hunt_dispatcher.CreateHunt(
+		self.Ctx, self.ConfigObj, acl_managers.NullACLManager{}, hunt_obj)
+	assert.NoError(self.T(), err)
 
 	// Simulate a System.Hunt.Participation event
 	journal, err := services.GetJournal(self.ConfigObj)
 	assert.NoError(t, err)
 
-	journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
+	err = journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("HuntId", self.hunt_id).
 			Set("ClientId", self.client_id).
 			Set("Fqdn", "MyHost"),
 		},
-		"System.Hunt.Participation", self.client_id, "")
+		artifacts.HUNT_PARTICIPATION)
+	assert.NoError(t, err)
 
 	time.Sleep(time.Second)
 
@@ -474,15 +464,8 @@ func (self *HuntTestSuite) TestHuntWithLabelClientHasOnlyExcludedLabel() {
 
 	flow_id := hunt_obj.StartRequest.FlowId
 
-	db, err := datastore.GetDB(self.ConfigObj)
-	assert.NoError(t, err)
-
-	hunt_path_manager := paths.NewHuntPathManager(hunt_obj.HuntId)
-	err = db.SetSubject(self.ConfigObj, hunt_path_manager.Path(), hunt_obj)
-	assert.NoError(t, err)
-
 	labeler := services.GetLabeler(self.ConfigObj)
-	err = labeler.SetClientLabel(
+	err := labeler.SetClientLabel(
 		context.Background(), self.ConfigObj, self.client_id, "MyLabel")
 	assert.NoError(t, err)
 
@@ -493,19 +476,23 @@ func (self *HuntTestSuite) TestHuntWithLabelClientHasOnlyExcludedLabel() {
 
 	hunt_dispatcher, err := services.GetHuntDispatcher(self.ConfigObj)
 	assert.NoError(t, err)
-	hunt_dispatcher.Refresh(self.Ctx, self.ConfigObj)
+
+	_, err = hunt_dispatcher.CreateHunt(
+		self.Ctx, self.ConfigObj, acl_managers.NullACLManager{}, hunt_obj)
+	assert.NoError(self.T(), err)
 
 	// Simulate a System.Hunt.Participation event
 	journal, err := services.GetJournal(self.ConfigObj)
 	assert.NoError(t, err)
 
-	journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
+	err = journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("HuntId", self.hunt_id).
 			Set("ClientId", self.client_id).
 			Set("Fqdn", "MyHost"),
 		},
-		"System.Hunt.Participation", self.client_id, "")
+		artifacts.HUNT_PARTICIPATION)
+	assert.NoError(t, err)
 
 	time.Sleep(time.Second)
 
@@ -558,22 +545,18 @@ func (self *HuntTestSuite) TestHuntClientOSCondition() {
 	})
 	assert.NoError(t, err)
 
-	db, err := datastore.GetDB(self.ConfigObj)
-	assert.NoError(t, err)
-
-	hunt_path_manager := paths.NewHuntPathManager(hunt_obj.HuntId)
-	err = db.SetSubject(self.ConfigObj, hunt_path_manager.Path(), hunt_obj)
-	assert.NoError(t, err)
-
 	hunt_dispatcher, err := services.GetHuntDispatcher(self.ConfigObj)
 	assert.NoError(t, err)
-	hunt_dispatcher.Refresh(self.Ctx, self.ConfigObj)
+
+	_, err = hunt_dispatcher.CreateHunt(
+		self.Ctx, self.ConfigObj, acl_managers.NullACLManager{}, hunt_obj)
+	assert.NoError(self.T(), err)
 
 	// Simulate a System.Hunt.Participation event
 	journal, err := services.GetJournal(self.ConfigObj)
 	assert.NoError(t, err)
 
-	journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
+	err = journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
 		[]*ordereddict.Dict{
 			ordereddict.NewDict().
 				Set("HuntId", self.hunt_id).
@@ -584,7 +567,8 @@ func (self *HuntTestSuite) TestHuntClientOSCondition() {
 				Set("ClientId", client_id_2).
 				Set("Fqdn", "MyHost2"),
 		},
-		"System.Hunt.Participation", self.client_id, "")
+		artifacts.HUNT_PARTICIPATION)
+	assert.NoError(t, err)
 
 	vtesting.WaitUntil(5*time.Second, self.T(), func() bool {
 		// Flow should be launched on client id because it is a Windows client.
@@ -669,7 +653,8 @@ func (self *HuntTestSuite) TestHuntClientOSConditionInterrogation() {
 	assert.NoError(self.T(), journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("ClientId", self.client_id),
-		}, "Server.Internal.Interrogation", self.client_id, ""))
+		},
+		artifacts.INTERROGATION_QUEUE))
 
 	// Ensure the hunt is collected on the client.
 	mdb := test_utils.GetMemoryDataStore(self.T(), self.ConfigObj)
@@ -694,16 +679,12 @@ func (self *HuntTestSuite) TestHuntManagerMutations() {
 		Expires:      uint64(time.Now().Add(7*24*time.Hour).UTC().UnixNano() / 1000),
 	}
 
-	db, err := datastore.GetDB(self.ConfigObj)
-	assert.NoError(self.T(), err)
-
-	hunt_path_manager := paths.NewHuntPathManager(hunt_obj.HuntId)
-	err = db.SetSubject(self.ConfigObj, hunt_path_manager.Path(), hunt_obj)
-	assert.NoError(self.T(), err)
-
 	dispatcher, err := services.GetHuntDispatcher(self.ConfigObj)
 	assert.NoError(self.T(), err)
-	dispatcher.Refresh(self.Ctx, self.ConfigObj)
+
+	_, err = dispatcher.CreateHunt(
+		self.Ctx, self.ConfigObj, acl_managers.NullACLManager{}, hunt_obj)
+	assert.NoError(self.T(), err)
 
 	// Schedule a new hunt on this client if we receive a
 	// participation event.
@@ -715,7 +696,8 @@ func (self *HuntTestSuite) TestHuntManagerMutations() {
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("HuntId", hunt_obj.HuntId).
 			Set("ClientId", self.client_id),
-		}, "System.Hunt.Participation", self.client_id, ""))
+		},
+		artifacts.HUNT_PARTICIPATION))
 
 	// This will schedule a hunt on this client.
 	vtesting.WaitUntil(time.Second, self.T(), func() bool {
@@ -749,7 +731,8 @@ func (self *HuntTestSuite) TestHuntManagerMutations() {
 			Set("Flow", flow_obj).
 			Set("FlowId", flow_id).
 			Set("ClientId", self.client_id),
-		}, "System.Flow.Completion", self.client_id, ""))
+		},
+		artifacts.FLOW_COMPLETION.WithClientId(self.client_id)))
 
 	vtesting.WaitUntil(time.Second, self.T(), func() bool {
 		h, pres := dispatcher.GetHunt(self.Ctx, hunt_obj.HuntId)
@@ -768,7 +751,8 @@ func (self *HuntTestSuite) TestHuntManagerMutations() {
 				HuntId: hunt_obj.HuntId,
 				State:  api_proto.Hunt_STOPPED,
 			}),
-		}, "Server.Internal.HuntModification", "", ""))
+		},
+		artifacts.HUNT_MODIFICATIONS))
 
 	vtesting.WaitUntil(time.Second, self.T(), func() bool {
 		h, pres := dispatcher.GetHunt(self.Ctx, hunt_obj.HuntId)
@@ -793,16 +777,12 @@ func (self *HuntTestSuite) TestHuntManagerErrors() {
 		Expires:      uint64(time.Now().Add(7*24*time.Hour).UTC().UnixNano() / 1000),
 	}
 
-	db, err := datastore.GetDB(self.ConfigObj)
-	assert.NoError(self.T(), err)
-
-	hunt_path_manager := paths.NewHuntPathManager(hunt_obj.HuntId)
-	err = db.SetSubject(self.ConfigObj, hunt_path_manager.Path(), hunt_obj)
-	assert.NoError(self.T(), err)
-
 	dispatcher, err := services.GetHuntDispatcher(self.ConfigObj)
 	assert.NoError(self.T(), err)
-	dispatcher.Refresh(self.Ctx, self.ConfigObj)
+
+	_, err = dispatcher.CreateHunt(
+		self.Ctx, self.ConfigObj, acl_managers.NullACLManager{}, hunt_obj)
+	assert.NoError(self.T(), err)
 
 	// Schedule a new hunt on this client if we receive a
 	// participation event.
@@ -813,11 +793,13 @@ func (self *HuntTestSuite) TestHuntManagerErrors() {
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("HuntId", hunt_obj.HuntId).
 			Set("ClientId", self.client_id),
-		}, "System.Hunt.Participation", self.client_id, ""))
+		},
+		artifacts.HUNT_PARTICIPATION))
 
 	// This will schedule a hunt on this client.
 	vtesting.WaitUntil(time.Second, self.T(), func() bool {
 		h, pres := dispatcher.GetHunt(self.Ctx, hunt_obj.HuntId)
+		fmt.Printf("hunt %v\n", h)
 		if !pres {
 			return false
 		}
@@ -838,7 +820,8 @@ func (self *HuntTestSuite) TestHuntManagerErrors() {
 			Set("Flow", flow_obj).
 			Set("FlowId", flow_id).
 			Set("ClientId", self.client_id),
-		}, "System.Flow.Completion", self.client_id, ""))
+		},
+		artifacts.FLOW_COMPLETION.WithClientId(self.client_id)))
 
 	// Both TotalClientsWithResults and TotalClientsWithErrors should
 	// increase.

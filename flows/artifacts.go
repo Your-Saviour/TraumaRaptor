@@ -130,7 +130,8 @@ func NewCollectionContext(
 		journal, err := services.GetJournal(config_obj)
 		if err == nil {
 			journal.PushRowsToArtifactAsync(ctx,
-				config_obj, row, "System.Flow.Completion")
+				config_obj, row,
+				artifact_paths.FLOW_COMPLETION.WithClientId(self.ClientId))
 		}
 	})
 
@@ -429,12 +430,11 @@ func ArtifactCollectorProcessOneMessage(
 					rowCounter.Inc()
 				}
 
-				// New clients already encode the JSON
-				// as line delimited, so we only need
-				// to append to end of the log file -
-				// much faster!
+				// New clients already encode the JSON as line
+				// delimited, so we only need to append to end of the
+				// log file - much faster!
 			} else if len(response.JSONLResponse) > 0 {
-				rs_writer.WriteJSONL(
+				_ = rs_writer.WriteJSONL(
 					[]byte(response.JSONLResponse), response.TotalRows)
 				rows_written = response.TotalRows
 				rowCounter.Add(float64(response.TotalRows))
@@ -614,9 +614,9 @@ func appendUploadDataToFile(
 
 		return journal.PushRowsToArtifact(ctx, config_obj,
 			[]*ordereddict.Dict{row},
-			"System.Upload.Completion",
-			message.Source, collection_context.SessionId,
-		)
+			artifact_paths.UPLOAD_COMPLETION.
+				WithClientId(message.Source).
+				WithFlowId(collection_context.SessionId))
 	}
 
 	return nil

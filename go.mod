@@ -44,7 +44,7 @@ require (
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/juju/ratelimit v1.0.1
 	github.com/lib/pq v1.10.9
-	github.com/magefile/mage v1.16.0
+	github.com/magefile/mage v1.17.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-pointer v0.0.0-20180825124634-49522c3f3791
 	github.com/mattn/go-sqlite3 v1.14.37
@@ -68,10 +68,10 @@ require (
 	github.com/xor-gate/debpkg v1.0.0
 	go.starlark.net v0.0.0-20230925163745-10651d5192ab
 	golang.org/x/crypto v0.48.0
-	golang.org/x/mod v0.33.0
+	golang.org/x/mod v0.34.0
 	golang.org/x/net v0.51.0
-	golang.org/x/sys v0.42.0
-	golang.org/x/text v0.35.0
+	golang.org/x/sys v0.43.0
+	golang.org/x/text v0.36.0
 	golang.org/x/time v0.14.0
 	google.golang.org/api v0.258.0
 	google.golang.org/genproto v0.0.0-20251222181119-0a764e51fe1b // indirect
@@ -82,9 +82,9 @@ require (
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	howett.net/plist v1.0.0
-	www.velocidex.com/golang/evtx v0.2.1-0.20251107004037-f9f4e4ed0236
+	www.velocidex.com/golang/evtx v0.2.1-0.20260427154223-06ab70045154
 	www.velocidex.com/golang/go-ese v0.2.1-0.20260321072931-b8793d15e573
-	www.velocidex.com/golang/go-ntfs v0.2.1-0.20260325103807-365312b796f7
+	www.velocidex.com/golang/go-ntfs v0.2.1-0.20260331025433-9cce38e8a396
 	www.velocidex.com/golang/go-pe v0.1.1-0.20251107001057-f93001158cd9
 	www.velocidex.com/golang/go-prefetch v0.0.0-20251027080408-85407689d0cb
 	www.velocidex.com/golang/oleparse v0.0.0-20250312121321-f7c2b4ec0959
@@ -111,18 +111,18 @@ require (
 	github.com/Velocidex/grok v0.0.1
 	github.com/Velocidex/ordereddict v0.0.0-20250821063524-02dc06e46238
 	github.com/Velocidex/sigma-go v0.0.0-20241113062227-c1c5ea4b5250
-	github.com/Velocidex/tracee_velociraptor v0.0.0-20260113161018-f7c951ffeab2
+	github.com/Velocidex/tracee_velociraptor v0.0.0-20260331030524-1e1e988d7fd9
 	github.com/Velocidex/velociraptor-site-search v0.0.0-20260316064028-d30384722e4b
 	github.com/Velocidex/yara-x-go v0.0.0-20251010010632-d8eaad9c539c
 	github.com/VirusTotal/gyp v0.9.1-0.20231202132633-bb35dbf177a6
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/alitto/pond/v2 v2.1.6
 	github.com/andybalholm/brotli v1.0.5
-	github.com/aws/aws-sdk-go-v2 v1.41.3
+	github.com/aws/aws-sdk-go-v2 v1.41.5
 	github.com/aws/aws-sdk-go-v2/config v1.27.6
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.11
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.16.8
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.51.3
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.97.3
 	github.com/blevesearch/bleve/v2 v2.5.7
 	github.com/charmbracelet/huh v0.6.0
 	github.com/charmbracelet/lipgloss v1.0.0
@@ -188,16 +188,16 @@ require (
 	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b // indirect
 	github.com/andybalholm/cascadia v1.3.2 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.6 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.8 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.19 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.19 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.19 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.21 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.21 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.5 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.20 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.6 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.11 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.19 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.19 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.22 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.13 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.21 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.21 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.12 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.16 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.8 // indirect
@@ -253,7 +253,7 @@ require (
 	github.com/geoffgarside/ber v1.1.0 // indirect
 	github.com/gizak/termui/v3 v3.1.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
@@ -332,11 +332,11 @@ require (
 	go.opentelemetry.io/contrib/detectors/gcp v1.39.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.64.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.64.0 // indirect
-	go.opentelemetry.io/otel v1.42.0 // indirect
-	go.opentelemetry.io/otel/metric v1.42.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.40.0 // indirect
-	go.opentelemetry.io/otel/sdk/metric v1.40.0 // indirect
-	go.opentelemetry.io/otel/trace v1.42.0 // indirect
+	go.opentelemetry.io/otel v1.43.0 // indirect
+	go.opentelemetry.io/otel/metric v1.43.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.43.0 // indirect
+	go.opentelemetry.io/otel/sdk/metric v1.43.0 // indirect
+	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect

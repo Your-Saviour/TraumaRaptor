@@ -52,6 +52,7 @@ func (self EBPFEventPlugin) Call(
 	go func() {
 		defer close(output_chan)
 		defer vql_subsystem.RegisterMonitor(ctx, "watch_ebpf", args)()
+		defer utils.RecoverVQL(scope)
 
 		err := vql_subsystem.CheckAccess(scope, acls.MACHINE_STATE)
 		if err != nil {
@@ -150,7 +151,7 @@ spec:
    scope:
      - global
    rules:
-`, utils.GetTime().Now().Unix()) + strings.Join(rules, "\n")
+`, utils.GetId()) + strings.Join(rules, "\n")
 }
 
 type EBPFEventListPlugin struct{}

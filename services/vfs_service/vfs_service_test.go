@@ -16,6 +16,7 @@ import (
 	flows_proto "www.velocidex.com/golang/velociraptor/flows/proto"
 	"www.velocidex.com/golang/velociraptor/json"
 	"www.velocidex.com/golang/velociraptor/paths"
+	"www.velocidex.com/golang/velociraptor/paths/artifacts"
 	"www.velocidex.com/golang/velociraptor/services"
 	"www.velocidex.com/golang/velociraptor/services/users"
 	"www.velocidex.com/golang/velociraptor/utils"
@@ -27,6 +28,9 @@ import (
 
 var definitions = []string{`
 name: System.VFS.ListDirectory
+sources:
+- name: Listing
+- name: Stats
 `, `
 name: System.VFS.DownloadFile
 `, `
@@ -77,11 +81,16 @@ func (self *VFSServiceTestSuite) EmulateCollection(
 	journal, err := services.GetJournal(self.ConfigObj)
 	assert.NoError(self.T(), err)
 
-	journal.PushRowsToArtifact(self.Ctx, self.ConfigObj, rows,
-		artifact, self.client_id, self.flow_id)
+	err = journal.PushRowsToArtifact(self.Ctx, self.ConfigObj, rows,
+		services.JournalOptions{
+			ArtifactName: artifact,
+			ClientId:     self.client_id,
+			FlowId:       self.flow_id,
+		})
+	assert.NoError(self.T(), err)
 
 	// Emulate a flow completion message coming from the flow processor.
-	journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
+	err = journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("ClientId", self.client_id).
 			Set("FlowId", self.flow_id).
@@ -91,7 +100,8 @@ func (self *VFSServiceTestSuite) EmulateCollection(
 				ArtifactsWithResults: []string{artifact},
 				TotalCollectedRows:   uint64(len(rows)),
 			})},
-		"System.Flow.Completion", "server", "")
+		artifacts.FLOW_COMPLETION)
+	assert.NoError(self.T(), err)
 
 	return self.flow_id
 }
@@ -107,14 +117,25 @@ func (self *VFSServiceTestSuite) EmulateCollectionWithVFSLs(
 	journal, err := services.GetJournal(self.ConfigObj)
 	assert.NoError(self.T(), err)
 
-	journal.PushRowsToArtifact(self.Ctx, self.ConfigObj, rows,
-		artifact+"/Listing", self.client_id, self.flow_id)
+	err = journal.PushRowsToArtifact(self.Ctx, self.ConfigObj, rows,
+		services.JournalOptions{
+			ArtifactName: artifact + "/Listing",
+			ClientId:     self.client_id,
+			FlowId:       self.flow_id,
+		})
 
-	journal.PushRowsToArtifact(self.Ctx, self.ConfigObj, stats,
-		artifact+"/Stats", self.client_id, self.flow_id)
+	assert.NoError(self.T(), err)
+
+	err = journal.PushRowsToArtifact(self.Ctx, self.ConfigObj, stats,
+		services.JournalOptions{
+			ArtifactName: artifact + "/Stats",
+			ClientId:     self.client_id,
+			FlowId:       self.flow_id,
+		})
+	assert.NoError(self.T(), err)
 
 	// Emulate a flow completion message coming from the flow processor.
-	journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
+	err = journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("ClientId", self.client_id).
 			Set("FlowId", self.flow_id).
@@ -127,7 +148,9 @@ func (self *VFSServiceTestSuite) EmulateCollectionWithVFSLs(
 				},
 				TotalCollectedRows: uint64(len(rows)),
 			})},
-		"System.Flow.Completion", "server", "")
+		artifacts.FLOW_COMPLETION)
+	assert.NoError(self.T(), err)
+
 	// test_utils.GetMemoryFileStore(self.T(), self.ConfigObj).Debug()
 	return self.flow_id
 }
@@ -186,7 +209,7 @@ func (self *VFSServiceTestSuite) TestVFSListDirectoryNew() {
 	client_path_manager := paths.NewClientPathManager(self.client_id)
 	resp := &api_proto.VFSListResponse{}
 
-	vtesting.WaitUntil(2000*time.Second, self.T(), func() bool {
+	vtesting.WaitUntil(20*time.Second, self.T(), func() bool {
 		db.GetSubject(self.ConfigObj,
 			client_path_manager.VFSPath([]string{"file", "a", "b"}),
 			resp)
@@ -209,7 +232,7 @@ func (self *VFSServiceTestSuite) TestVFSListDirectoryEmpty() {
 
 	// Emulate a flow completion message coming from the flow processor.
 	artifact := "System.VFS.ListDirectory"
-	journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
+	err = journal.PushRowsToArtifact(self.Ctx, self.ConfigObj,
 		[]*ordereddict.Dict{ordereddict.NewDict().
 			Set("ClientId", self.client_id).
 			Set("FlowId", self.flow_id).
@@ -231,7 +254,9 @@ func (self *VFSServiceTestSuite) TestVFSListDirectoryEmpty() {
 						},
 					}},
 				}}),
-		}, "System.Flow.Completion", "server", "")
+		},
+		artifacts.FLOW_COMPLETION)
+	assert.NoError(self.T(), err)
 
 	db, err := datastore.GetDB(self.ConfigObj)
 	assert.NoError(self.T(), err)

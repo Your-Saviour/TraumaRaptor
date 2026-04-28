@@ -27,11 +27,13 @@ import (
 
 	"github.com/Velocidex/ordereddict"
 	errors "github.com/go-errors/errors"
+	"www.velocidex.com/golang/velociraptor/constants"
 	file_store "www.velocidex.com/golang/velociraptor/file_store"
 	"www.velocidex.com/golang/velociraptor/file_store/api"
 	"www.velocidex.com/golang/velociraptor/file_store/path_specs"
 	"www.velocidex.com/golang/velociraptor/json"
 	"www.velocidex.com/golang/velociraptor/paths"
+	"www.velocidex.com/golang/velociraptor/paths/artifact_modes"
 	"www.velocidex.com/golang/velociraptor/paths/artifacts"
 	"www.velocidex.com/golang/velociraptor/result_sets"
 	"www.velocidex.com/golang/velociraptor/services"
@@ -290,10 +292,14 @@ func GetPathSpec(
 			NotebookIndexForUser(principal), nil
 	}
 
+	if in.Type == "USER_MESSAGES" {
+		return paths.NewUserPathManager(principal).Notifications(), nil
+	}
+
 	if in.FlowId != "" && in.Artifact != "" {
-		mode := paths.MODE_CLIENT
-		if in.ClientId == "server" {
-			mode = paths.MODE_SERVER
+		mode := artifact_modes.MODE_CLIENT
+		if in.ClientId == constants.VELOCIRAPTOR_SERVER_CLIENT_ID {
+			mode = artifact_modes.MODE_SERVER
 		}
 		return artifacts.NewArtifactPathManagerWithMode(
 			config_obj, in.ClientId, in.FlowId, in.Artifact,

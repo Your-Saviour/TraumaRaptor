@@ -6,6 +6,7 @@ import (
 	"github.com/Velocidex/ordereddict"
 	api_proto "www.velocidex.com/golang/velociraptor/api/proto"
 	config_proto "www.velocidex.com/golang/velociraptor/config/proto"
+	"www.velocidex.com/golang/velociraptor/paths/artifacts"
 	"www.velocidex.com/golang/velociraptor/services"
 )
 
@@ -21,6 +22,8 @@ import (
 func (self *HuntDispatcher) MutateHunt(
 	ctx context.Context, config_obj *config_proto.Config,
 	mutation *api_proto.HuntMutation) error {
+
+	self.Debug("MutateHunt: %v", mutation)
 
 	// Short circuit deletions on the master to directly remove the
 	// hunt.
@@ -42,6 +45,6 @@ func (self *HuntDispatcher) MutateHunt(
 		ordereddict.NewDict().
 			Set("hunt_id", mutation.HuntId).
 			Set("mutation", mutation),
-		"Server.Internal.HuntModification")
+		artifacts.HUNT_MODIFICATIONS)
 	return nil
 }
