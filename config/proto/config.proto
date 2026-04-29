@@ -1325,6 +1325,37 @@ message Defaults {
     repeated string lockdown_denied_permissions = 32;
     int64 certificate_validity_days = 33;
     bool disable_inventory_service_external_access = 34;
+
+    // Performance tuning for result set reads (notebooks, source() queries).
+
+    // Size of the bufio read buffer when scanning JSONL result-set files.
+    // Default 1 MiB (1048576). Increase to reduce syscall overhead on large
+    // result sets. Set to 0 to use the default (1 MiB).
+    uint64 notebook_source_read_buffer_size = 61;
+
+    // Number of parallel goroutines used by source() to read a result set.
+    // Default 1 (sequential, preserves row order). Set > 1 to enable
+    // parallel chunked reading; note that row ORDER IS NOT PRESERVED across
+    // chunks when workers > 1.
+    uint64 notebook_source_workers = 62;
+
+    // Enable simdjson-go SIMD-accelerated JSON parsing in the result-set
+    // read path. Only effective on amd64 CPUs with AVX2; ignored elsewhere.
+    // Default false (opt-in).
+    bool notebook_source_use_simdjson = 63;
+
+    // Enable lazy / deferred JSON field parsing for result-set rows.
+    // When true, row bytes are kept raw and fields are parsed only on first
+    // access, reducing allocations for filtered queries. Default false (opt-in).
+    bool notebook_source_lazy_json = 64;
+
+    // Enable sync.Pool reuse of ordereddict.Dict objects in the result-set
+    // read path, reducing GC pressure. Default true (safe to enable).
+    bool notebook_source_dict_pool = 65;
+
+    // Default number of worker goroutines for the parallelize() VQL plugin
+    // when the workers= argument is not specified. Default 4.
+    uint64 notebook_parallelize_default_workers = 66;
 }
 
 // Configures crypto preferences

@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
+	chroma "github.com/alecthomas/chroma"
+	"github.com/alecthomas/chroma/lexers"
 	"github.com/Velocidex/ordereddict"
 	"google.golang.org/protobuf/proto"
 	artifacts_proto "www.velocidex.com/golang/velociraptor/artifacts/proto"
@@ -159,10 +162,69 @@ func truncateLongLines(in string) string {
 	q_lines := strings.Split(in, "\n")
 	for i := range q_lines {
 		if len(q_lines[i]) > 200 {
-			q_lines[i] = q_lines[i][:200] + " ..."
+			q_lines[i] = truncateVQLLine(q_lines[i], 200)
 		}
 	}
 	return strings.Join(q_lines, "\n")
+}
+
+// truncateVQLLine trims a single VQL line to maxBytes using the Chroma VQL
+// tokenizer. When a token spans the cut point the text is split at a rune
+// boundary; if that token is string content the matching closing quote is
+// appended so Chroma never sees an unterminated string (which would bleed its
+// colour class into subsequent lines).
+func truncateVQLLine(line string, maxBytes int) string {
+	lexer := lexers.Get("vql")
+	if lexer == nil {
+		return truncateAtRuneBoundary(line, maxBytes) + " ..."
+	}
+	iterator, err := lexer.Tokenise(nil, line)
+	if err != nil {
+		return truncateAtRuneBoundary(line, maxBytes) + " ..."
+	}
+	var result strings.Builder
+	bytesUsed := 0
+	for token := iterator(); token.Type != chroma.EOFType; token = iterator() {
+		remaining := maxBytes - bytesUsed
+		if len(token.Value) <= remaining {
+			result.WriteString(token.Value)
+			bytesUsed += len(token.Value)
+			continue
+		}
+		// This token straddles the budget. Reserve 1 byte for the closing
+		// quote when the token is string content so the total stays ≤ maxBytes.
+		closing := ""
+		budget := remaining
+		switch token.Type {
+		case chroma.LiteralStringSingle:
+			closing = "'"
+			if budget > 0 {
+				budget--
+			}
+		case chroma.LiteralStringDouble:
+			closing = "\""
+			if budget > 0 {
+				budget--
+			}
+		}
+		if budget > 0 {
+			result.WriteString(truncateAtRuneBoundary(token.Value, budget))
+		}
+		result.WriteString(closing)
+		break
+	}
+	result.WriteString(" ...")
+	return result.String()
+}
+
+func truncateAtRuneBoundary(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	for maxBytes > 0 && !utf8.RuneStart(s[maxBytes]) {
+		maxBytes--
+	}
+	return s[:maxBytes]
 }
 
 func GenerateArtifactDescriptionReport(

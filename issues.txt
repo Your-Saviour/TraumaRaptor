@@ -1,0 +1,117 @@
+Issue: Hunt results not appearing in notebook view
+Date: 2026-04-28
+Status: Fixed
+
+Root cause: Two separate problems stacked on top of each other.
+
+--- Problem 1: Scheduler flood (the original cause) ---
+
+The defaults.notebook_number_of_local_workers config had been corrupted to 500
+by a previous yaml roundtrip (Python yaml.safe_load + yaml.dump strips comments
+and can silently corrupt numeric values). Combined with the minion's 100-worker
+override, there were ~600 notebook workers all making persistent gRPC connections
+to the master scheduler simultaneously. This flooded the scheduler with:
+
+  [ERROR] Scheduler: rpc error: code = Canceled desc = context canceled
+
+...repeated hundreds of times per second, which starved other services including
+the hunt flow completion handler. When a client finished a hunt flow, the
+completion event was either dropped or never processed, so results were never
+copied from the client's collection directory:
+
+  /opt/velociraptor/clients/<client_id>/artifacts/<artifact>/<flow_id>/
+
+...into the hunt's aggregated result directory:
+
+  /opt/velociraptor/hunts/<hunt_id>/<artifact>/
+
+This caused the hunt notebook to show "Table contains no data" even though the
+underlying data was fully present on disk in the client collection.
+
+--- Problem 2: Minion workers can't run hunt queries (structural issue) ---
+
+The hunt_results VQL plugin requires the HuntDispatcher service to look up hunt
+metadata. HuntDispatcher is a master-only service - the minion does not run it.
+
+With the minion worker priority set equal to the master (both at +10 after our
+earlier tuning), notebook cells were landing on minion workers ~50% of the time.
+Those workers called hunt_results, failed to find the HuntDispatcher, and
+returned:
+
+  hunt_results: Hunt not found
+
+This happened even on a brand new hunt with valid data on disk, because the
+query was executing on the wrong node.
+
+--- Fixes applied ---
+
+1. Reduced notebook_number_of_local_workers to 4 on both nodes (was 500/100).
+   This stopped the scheduler flood and allowed hunt completion events to
+   be processed normally.
+
+2. Set the minion's notebook_worker_priority to -10 (below master default of
+   +10) so hunt notebook cells always land on a master worker that has the
+   HuntDispatcher available. Minion workers still act as overflow when all
+   master workers are saturated with heavy queries.
+
+3. Manually backfilled the missing aggregated result files for hunt
+   H.D7OB4HNFED9OQ by copying the NDJSON files from the client collection
+   into the hunt directory and regenerating the .json.index byte-offset files
+   with a Python script.
+
+--- Why source() triggers the hunt lookup (code trace) ---
+
+The VQL in the notebook cell looks completely innocent:
+
+  SELECT * FROM source(artifact="Generic.Client.Info/BasicInformation")
+
+There is no hunt_id in the cell. The hunt context is injected invisibly through
+the following chain:
+
+1. services/notebook/initial.go:434-441
+   When a hunt notebook is created, Velociraptor automatically adds HuntId as
+   an environment parameter in the notebook metadata:
+
+     res.Parameters = append(res.Parameters,
+         &artifacts_proto.ArtifactParameter{
+             Name:    "HuntId",
+             Default: hunt_id,
+         })
+
+2. services/notebook/worker.go:142-149
+   When a worker picks up the cell job, it iterates the notebook metadata's
+   request environment and calls tmpl.SetEnv() for each key, injecting HuntId
+   silently into the VQL scope.
+
+3. vql/server/flows/results.go:494-499
+   source() calls ParseSourceArgsFromScope() which resolves HuntId from the
+   scope if it wasn't explicitly provided:
+
+     hunt_id, pres := scope.Resolve("HuntId")
+     if pres {
+         self.HuntId, _ = hunt_id.(string)
+     }
+
+4. vql/server/flows/results.go:220-230
+   Once source() sees a HuntId, it completely delegates to hunt_results():
+
+     return hunts.HuntResultsPlugin{}.Call(ctx, scope, new_args)
+
+5. vql/server/hunts/hunts.go:320
+   hunt_results() looks up the hunt via HuntDispatcher (master-only service).
+   On the minion this fails:
+
+     return nil, utils.Wrap(utils.NotFoundError, "Hunt not found")
+
+The design gap: the implicit context injection is invisible to the user. The
+cell VQL gives no indication a hunt lookup is happening, and the error message
+gives no indication that node routing is the problem.
+
+--- Config values after fix ---
+
+Both nodes:
+  defaults.notebook_number_of_local_workers: 4
+
+Minion only (ubuntu-2):
+  Minion.notebook_number_of_local_workers: 4
+  Minion.notebook_worker_priority: -10

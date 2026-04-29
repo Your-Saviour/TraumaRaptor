@@ -3995,6 +3995,28 @@ type Defaults struct {
 	LockdownDeniedPermissions             []string `protobuf:"bytes,32,rep,name=lockdown_denied_permissions,json=lockdownDeniedPermissions,proto3" json:"lockdown_denied_permissions,omitempty"`
 	CertificateValidityDays               int64    `protobuf:"varint,33,opt,name=certificate_validity_days,json=certificateValidityDays,proto3" json:"certificate_validity_days,omitempty"`
 	DisableInventoryServiceExternalAccess bool     `protobuf:"varint,34,opt,name=disable_inventory_service_external_access,json=disableInventoryServiceExternalAccess,proto3" json:"disable_inventory_service_external_access,omitempty"`
+
+	// Performance tuning for result set reads (notebooks, source() queries).
+
+	// Size of the bufio read buffer when scanning JSONL result-set files.
+	// Default 1 MiB. Set to 0 to use the default.
+	NotebookSourceReadBufferSize uint64 `protobuf:"varint,61,opt,name=notebook_source_read_buffer_size,json=notebookSourceReadBufferSize,proto3" json:"notebook_source_read_buffer_size,omitempty"`
+
+	// Number of parallel goroutines used by source() to read a result set.
+	// Default 1 (sequential, row order preserved). Set > 1 for parallel chunked reads.
+	NotebookSourceWorkers uint64 `protobuf:"varint,62,opt,name=notebook_source_workers,json=notebookSourceWorkers,proto3" json:"notebook_source_workers,omitempty"`
+
+	// Enable simdjson-go SIMD JSON parsing (amd64+AVX2 only). Default false.
+	NotebookSourceUseSimdjson bool `protobuf:"varint,63,opt,name=notebook_source_use_simdjson,json=notebookSourceUseSimdjson,proto3" json:"notebook_source_use_simdjson,omitempty"`
+
+	// Enable lazy/deferred JSON field parsing for result-set rows. Default false.
+	NotebookSourceLazyJson bool `protobuf:"varint,64,opt,name=notebook_source_lazy_json,json=notebookSourceLazyJson,proto3" json:"notebook_source_lazy_json,omitempty"`
+
+	// Enable sync.Pool reuse of ordereddict.Dict in the result-set read path. Default true.
+	NotebookSourceDictPool bool `protobuf:"varint,65,opt,name=notebook_source_dict_pool,json=notebookSourceDictPool,proto3" json:"notebook_source_dict_pool,omitempty"`
+
+	// Default worker count for the parallelize() VQL plugin. Default 4.
+	NotebookParallelizeDefaultWorkers uint64 `protobuf:"varint,66,opt,name=notebook_parallelize_default_workers,json=notebookParallelizeDefaultWorkers,proto3" json:"notebook_parallelize_default_workers,omitempty"`
 }
 
 func (x *Defaults) Reset() {
@@ -4377,6 +4399,48 @@ func (x *Defaults) GetDisableInventoryServiceExternalAccess() bool {
 		return x.DisableInventoryServiceExternalAccess
 	}
 	return false
+}
+
+func (x *Defaults) GetNotebookSourceReadBufferSize() uint64 {
+	if x != nil {
+		return x.NotebookSourceReadBufferSize
+	}
+	return 0
+}
+
+func (x *Defaults) GetNotebookSourceWorkers() uint64 {
+	if x != nil {
+		return x.NotebookSourceWorkers
+	}
+	return 0
+}
+
+func (x *Defaults) GetNotebookSourceUseSimdjson() bool {
+	if x != nil {
+		return x.NotebookSourceUseSimdjson
+	}
+	return false
+}
+
+func (x *Defaults) GetNotebookSourceLazyJson() bool {
+	if x != nil {
+		return x.NotebookSourceLazyJson
+	}
+	return false
+}
+
+func (x *Defaults) GetNotebookSourceDictPool() bool {
+	if x != nil {
+		return x.NotebookSourceDictPool
+	}
+	return false
+}
+
+func (x *Defaults) GetNotebookParallelizeDefaultWorkers() uint64 {
+	if x != nil {
+		return x.NotebookParallelizeDefaultWorkers
+	}
+	return 0
 }
 
 // Configures crypto preferences

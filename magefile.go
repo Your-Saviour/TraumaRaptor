@@ -249,6 +249,9 @@ func Release() error {
 }
 
 func Linux() error {
+	if err := build_gui_files(); err != nil {
+		return err
+	}
 	return Builder{
 		extra_tags: " release yara ",
 		goos:       "linux",

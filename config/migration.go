@@ -211,6 +211,32 @@ func migrate_0_7_5(config_obj *config_proto.Config) {
 
 }
 
+func migrate_0_7_6(config_obj *config_proto.Config) {
+	if config_obj.Defaults == nil {
+		config_obj.Defaults = &config_proto.Defaults{}
+	}
+
+	if config_obj.Defaults.NotebookSourceReadBufferSize == 0 {
+		config_obj.Defaults.NotebookSourceReadBufferSize = 1 << 20 // 1 MiB
+	}
+
+	if config_obj.Defaults.NotebookSourceWorkers == 0 {
+		config_obj.Defaults.NotebookSourceWorkers = 1 // sequential, preserves order
+	}
+
+	// NotebookSourceUseSimdjson defaults false — opt-in only
+	// NotebookSourceLazyJson defaults false — opt-in only
+
+	// NotebookSourceDictPool: default true (safe to enable).
+	// We cannot distinguish "unset" from "false" for bool fields in proto3,
+	// so this is left to callers to interpret absence as "use default true".
+	// See simple.go for the applyDefault pattern.
+
+	if config_obj.Defaults.NotebookParallelizeDefaultWorkers == 0 {
+		config_obj.Defaults.NotebookParallelizeDefaultWorkers = 4
+	}
+}
+
 func migrate(config_obj *config_proto.Config) {
 	migrate_0_4_2(config_obj)
 	migrate_0_4_6(config_obj)
@@ -218,4 +244,5 @@ func migrate(config_obj *config_proto.Config) {
 	migrate_0_6_1(config_obj)
 	migrate_0_7_0(config_obj)
 	migrate_0_7_5(config_obj)
+	migrate_0_7_6(config_obj)
 }

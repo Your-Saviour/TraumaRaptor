@@ -8,6 +8,21 @@ Velociraptor (v0.76.1) — an endpoint visibility and collection tool by Rapid7.
 
 Module path: `www.velocidex.com/golang/velociraptor`
 
+## Build Environment
+
+A Docker-based build environment lives in `Docker/build/` for building Linux amd64
+binaries without installing Go locally. The repo root is bind-mounted into the container
+so host edits are immediately buildable and `output/` lands back on the host.
+
+```bash
+cd Docker/build
+docker compose build             # build the image once (re-run if go.mod changes)
+docker compose run --rm build    # interactive shell at /src with full toolchain
+docker compose run --rm build make linux   # one-shot build
+```
+
+Named volumes (`go-mod-cache`, `go-build-cache`) keep incremental builds fast across runs.
+
 ## Build Commands
 
 ```bash

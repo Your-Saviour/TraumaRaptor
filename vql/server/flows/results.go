@@ -32,6 +32,7 @@ import (
 	"www.velocidex.com/golang/velociraptor/paths/artifact_modes"
 	artifact_paths "www.velocidex.com/golang/velociraptor/paths/artifacts"
 	"www.velocidex.com/golang/velociraptor/result_sets"
+	"www.velocidex.com/golang/velociraptor/result_sets/simple"
 	"www.velocidex.com/golang/velociraptor/services"
 	"www.velocidex.com/golang/velociraptor/utils"
 	"www.velocidex.com/golang/velociraptor/vql"
@@ -286,6 +287,24 @@ func (self SourcePlugin) Call(
 			}
 		}
 
+		// Use lazy JSON rows when the reader supports it and the config
+		// requests it (notebook_source_lazy_json=true).
+		if lazy_reader, ok := result_set_reader.(simple.LazyRowsReader); ok && lazy_reader.IsLazyJson() {
+			count := int64(0)
+			for row := range lazy_reader.LazyRows(ctx) {
+				if arg.Limit > 0 && count >= arg.Limit {
+					return
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case output_chan <- row:
+				}
+				count++
+			}
+			return
+		}
+
 		count := int64(0)
 		for row := range result_set_reader.Rows(ctx) {
 			if arg.Limit > 0 && count >= arg.Limit {
@@ -375,8 +394,8 @@ func getNotebookResultSetReader(
 		Cell(arg.NotebookCellId, arg.NotebookCellVersion).
 		QueryStorage(table)
 
-	return result_sets.NewResultSetReader(
-		file_store_factory, path_manager.Path())
+	return result_sets.NewResultSetReaderWithOptions(ctx, config_obj,
+		file_store_factory, path_manager.Path(), result_sets.ResultSetOptions{})
 }
 
 func getFlowResultSetReader(
@@ -393,9 +412,8 @@ func getFlowResultSetReader(
 		return nil, err
 	}
 
-	return result_sets.NewResultSetReader(
-		file_store_factory, path_manager.Path())
-
+	return result_sets.NewResultSetReaderWithOptions(ctx, config_obj,
+		file_store_factory, path_manager.Path(), result_sets.ResultSetOptions{})
 }
 
 // Override SourcePluginArgs from the scope.

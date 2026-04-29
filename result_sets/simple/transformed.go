@@ -57,7 +57,7 @@ func (self ResultSetFactory) getFilteredReader(
 	// Try to open the transformed result set if it is already cached.
 	base_stat, err := file_store_factory.StatFile(log_path)
 	if err != nil {
-		return self.NewResultSetReader(file_store_factory, log_path)
+		return self.newResultSetReaderImpl(file_store_factory, log_path, config_obj)
 	}
 
 	cached_stat, err := file_store_factory.StatFile(transformed_path)
@@ -67,7 +67,7 @@ func (self ResultSetFactory) getFilteredReader(
 	}
 
 	// Nope - we have to build the new cache from the original table.
-	reader, err := self.NewResultSetReader(file_store_factory, log_path)
+	reader, err := self.newResultSetReaderImpl(file_store_factory, log_path, config_obj)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (self ResultSetFactory) getSortedReader(
 
 	// No sorting required.
 	if options.SortColumn == "" {
-		reader, err := self.NewResultSetReader(file_store_factory, log_path)
+		reader, err := self.newResultSetReaderImpl(file_store_factory, log_path, config_obj)
 		if err != nil {
 			return nil, err
 		}
@@ -161,13 +161,13 @@ func (self ResultSetFactory) getSortedReader(
 	// cached.
 	base_stat, err := file_store_factory.StatFile(log_path)
 	if err != nil {
-		return self.NewResultSetReader(file_store_factory, log_path)
+		return self.newResultSetReaderImpl(file_store_factory, log_path, config_obj)
 	}
 
 	// Only use the cache if it is newer than the base file.
 	cached_stat, err := file_store_factory.StatFile(transformed_path)
 	if err == nil && cached_stat.ModTime().After(base_stat.ModTime()) {
-		result, err := self.NewResultSetReader(file_store_factory, transformed_path)
+		result, err := self.newResultSetReaderImpl(file_store_factory, transformed_path, config_obj)
 		if err != nil {
 			return nil, err
 		}
@@ -177,7 +177,7 @@ func (self ResultSetFactory) getSortedReader(
 
 	// Nope - we have to build the new cache from the original table.
 	scope := vql_subsystem.MakeScope()
-	reader, err := self.NewResultSetReader(file_store_factory, log_path)
+	reader, err := self.newResultSetReaderImpl(file_store_factory, log_path, config_obj)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +244,7 @@ func (self ResultSetFactory) getSortedReader(
 	// Close synchronously to flush the data
 	writer.Close()
 
-	result, err := self.NewResultSetReader(file_store_factory, transformed_path)
+	result, err := self.newResultSetReaderImpl(file_store_factory, transformed_path, config_obj)
 	if err != nil {
 		return nil, err
 	}
